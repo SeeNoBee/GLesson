@@ -1,0 +1,397 @@
+#ifndef VMATH_VECTOR_TMPL
+#define VMATH_VECTOR_TMPL
+
+#include <ostream>
+#include <limits>
+#include <type_traits>
+#include <utility>
+
+namespace vmath
+{
+template <typename Type, unsigned int dimension>
+class Vector;
+
+#include <vmath\SwizzlingTypes.h>
+
+template <typename Type, unsigned int convolution, unsigned int size = SwizzlingTools::size(convolution)>
+class Swizzling
+{
+public:
+	template <typename AnotherType, unsigned int dimension>
+	friend class Vector;
+
+	inline Vector<Type, SwizzlingTools::size(convolution)> toVector() const
+	{
+		return Vector<Type, SwizzlingTools::size(convolution)>(Vector<Type, 4>(
+			memory[SwizzlingTools::index(convolution, 0)],
+			memory[SwizzlingTools::index(convolution, 1)],
+			memory[SwizzlingTools::index(convolution, 2)],
+			memory[SwizzlingTools::index(convolution, 3)]));
+	}
+
+	operator Vector<Type, SwizzlingTools::size(convolution)>() const
+	{
+		return toVector();
+	}
+
+	template <typename AnotherType, unsigned int conv>
+	Swizzling& operator=(const Swizzling<AnotherType, conv>& swizzling)
+	{
+		operator=(swizzling.toVector());
+		return *this;
+	}
+
+	template <typename AnotherType>
+	Swizzling& operator=(const Vector<AnotherType, SwizzlingTools::size(convolution)> &vector)
+	{
+		static_assert(!SwizzlingTools::hasRepeates(convolution), "Multiple change of a single vector element");
+		memory[SwizzlingTools::index(convolution, 0)] = vector[0];
+		memory[SwizzlingTools::index(convolution, 1)] = vector[1];
+		memory[SwizzlingTools::index(convolution, 2)] = vector[2];
+		memory[SwizzlingTools::index(convolution, 3)] = vector[3];
+		return *this;
+	}
+
+private:
+	Type *memory;
+
+	Swizzling() = delete;
+	Swizzling(Type *mem) : memory(mem) {}
+};
+
+template <typename Type, unsigned int convolution, unsigned int size>
+inline Vector<Type, size> v(const Swizzling<Type, convolution, size> &swizzling)
+{
+	return swizzling.toVector();
+}
+
+}
+
+#include <vmath\VectorTools.h>
+
+#endif //VMATH_VECTOR_TMPL
+
+#ifdef VMATH_VECTOR_SIZE
+
+#define EXPAND_SIZE VMATH_VECTOR_SIZE
+#include <vmath/PreprocessorTools.h>
+
+namespace vmath
+{
+
+template <class Type>
+class Vector<Type, VMATH_VECTOR_SIZE>
+{
+public:
+	union
+	{
+		Type memory[VMATH_VECTOR_SIZE];
+		struct { FIELDS(Type, x, y, z, w) };
+		struct { FIELDS(Type, r, g, b, a) };
+		struct { FIELDS(Type, s, t, p, q) };
+	};
+
+	typedef Type BaseType;
+
+	#if (VMATH_VECTOR_SIZE == 1)
+	#define INNER_TYPE(Type) Type
+	#else
+	#define INNER_TYPE(Type) Vector<Type, VMATH_VECTOR_SIZE>
+	#endif
+
+	typedef INNER_TYPE(Type) InnerType;
+
+	Vector(const Type &value = CAST(Type, 0)):
+		memory{ OPERANDS(, value, value, value, value) } {}
+
+	template <typename AnotherType>
+	Vector(const AnotherType *mem):
+		Vector(OPERANDS(mem[, 0], 1], 2], 3])) {}
+
+
+	template <typename AnotherType>
+	Vector(const Vector<AnotherType, VMATH_VECTOR_SIZE> &vector):
+		memory{ OPERANDS(, CAST(Type, vector.x), CAST(Type, vector.y), CAST(Type, vector.z), CAST(Type, vector.w)) } {}
+
+	template <unsigned int size>
+	explicit Vector(const Vector<Type, size> &vector):
+		memory{ OPERANDS(, CAST(Type, vector.x), CAST(Type, vector.y), CAST(Type, vector.z), CAST(Type, vector.w)) } {}
+
+	#if (VMATH_VECTOR_SIZE > 1)
+	Vector(OPERANDS(const Type&, op1, op2, op3, op4)):
+		memory{ OPERANDS(, op1, op2, op3, op4) } {}
+	#endif
+
+	#if (VMATH_VECTOR_SIZE > 2)
+	Vector(const Type &op1, const Vector<Type, VMATH_VECTOR_SIZE - 1> &op2):
+		memory{ OPERANDS(,op1, op2.x, op2.y, op2.z) } {}
+
+	explicit Vector(const Vector<Type, VMATH_VECTOR_SIZE - 1> &op1, const Type &op2 = CAST(Type, 0)):
+		memory{ EXPAND(,op1.x, COMMA op1.y, COMMA op1.z), op2 } {}
+	#endif
+
+	#if (VMATH_VECTOR_SIZE == 4)
+	Vector(const Type &op1, const Type &op2, const Vector<Type, VMATH_VECTOR_SIZE - 2> &op3):
+		memory{ op1, op2, op3.x, op3.y } {}
+
+	Vector(const Type &op1, const Vector<Type, VMATH_VECTOR_SIZE - 2> &op2, const Type &op3):
+		memory{ op1, op2.x, op2.y, op3 } {}
+
+	explicit Vector(const Vector<Type, VMATH_VECTOR_SIZE - 2> &op1, const Type &op2 = CAST(Type, 0), const Type &op3 = CAST(Type, 0)):
+		memory{ op1.x, op1.y, op2, op3 } {}
+
+	Vector(const Vector<Type, VMATH_VECTOR_SIZE - 2> &op1, const Vector<Type, VMATH_VECTOR_SIZE - 2> &op2):
+		memory{ op1.x, op1.y, op2.x, op2.y } {}
+	#endif
+
+	friend std::ostream& operator<<(std::ostream& os, const Vector<Type, VMATH_VECTOR_SIZE> &vector)
+	{
+		os << '(' << EXPAND(vector.x, << ", " << vector.y, << ", " << vector.z, << ", " << vector.w) << ')';
+		return os;
+	}
+
+	inline Vector<SignedType<Type>, VMATH_VECTOR_SIZE> operator-() const
+	{
+		typedef SignedType<Type> SignedType;
+		return { OPERANDS(-, CAST(SignedType, x), CAST(SignedType, y), CAST(SignedType, z), CAST(SignedType, w)) };
+	}
+
+	#define SELF_BINARY_OPERATOR(op)\
+	template <typename AnotherType>\
+	inline Vector<Type, VMATH_VECTOR_SIZE>& operator op(const Vector<AnotherType, VMATH_VECTOR_SIZE> &operand) {\
+	STATEMENTS(x op operand.x, y op operand.y, z op operand.z, w op operand.w);\
+	return *this;}\
+	template <typename AnotherType>\
+	inline Vector<Type, VMATH_VECTOR_SIZE>& operator op(const AnotherType &operand) {\
+	STATEMENTS(x op operand, y op operand, z op operand, w op operand);\
+	return *this;}\
+	template <typename AnotherType, unsigned int conv>\
+	inline Vector<Type, VMATH_VECTOR_SIZE>& operator op(const Swizzling<AnotherType, conv, VMATH_VECTOR_SIZE> &swizzling) {\
+	return (*this) op swizzling.toVector();}
+
+	SELF_BINARY_OPERATOR(+=)
+	SELF_BINARY_OPERATOR(-=)
+	SELF_BINARY_OPERATOR(*=)
+	SELF_BINARY_OPERATOR(/=)
+
+	template <typename AnotherType>
+	inline bool operator==(const Vector<AnotherType, VMATH_VECTOR_SIZE> &vector) const
+	{
+		return qdistance(vector) <= std::numeric_limits<decltype(qdistance(vector))>::epsilon();
+	}
+
+	template <typename AnotherType>
+	inline bool operator!=(const Vector<AnotherType, VMATH_VECTOR_SIZE> &vector) const
+	{
+		return !operator==(vector);
+	}
+
+	template <unsigned int index>
+	inline const Type& get() const
+	{
+		static_assert(VMATH_VECTOR_SIZE > index, "Access to a nonexistent item of vector (size is too small)");
+		return memory[index];
+	}
+
+	template <unsigned int index>
+	inline void check() const
+	{
+		static_assert(VMATH_VECTOR_SIZE > index, "Access to a nonexistent item of vector (size is too small)");
+	}
+
+	inline Type& operator[](unsigned char index)
+	{
+		return memory[index % VMATH_VECTOR_SIZE];
+	}
+
+	inline const Type& operator[](unsigned char index) const
+	{
+		return memory[index % VMATH_VECTOR_SIZE];
+	}
+
+	template <typename SwizzlingType>
+	inline Swizzling<Type, SwizzlingType::convolution> operator[](SwizzlingType &swizzling)
+	{
+		check<SwizzlingTools::index(SwizzlingType::convolution, 0)>();
+		check<SwizzlingTools::index(SwizzlingType::convolution, 1)>();
+		check<SwizzlingTools::index(SwizzlingType::convolution, 2)>();
+		check<SwizzlingTools::index(SwizzlingType::convolution, 3)>();
+		return Swizzling<Type, SwizzlingType::convolution>(memory);
+	}
+
+	template <typename SwizzlingType>
+	inline const Swizzling<Type, SwizzlingType::convolution> operator[](SwizzlingType &swizzling) const
+	{
+		return operator[](swizzling);
+	}
+
+	template <typename SwizzlingType>
+	inline Swizzling<Type, SwizzlingType::convolution> operator()(SwizzlingType &swizzling)
+	{
+		return operator[](swizzling);
+	}
+
+	#if (VMATH_VECTOR_SIZE == 3)
+	template <typename AnotherType>
+	inline Vector<SignedType<RESULT_TYPE(Type, *, AnotherType)>, 3>
+	cross(const Vector<AnotherType, 3> &op) const
+	{
+		typedef SignedType<RESULT_TYPE(Type, *, AnotherType)> SignedType;
+		return {
+			CAST(SignedType, y * op.z) - CAST(SignedType, z * op.y),
+			CAST(SignedType, z * op.x) - CAST(SignedType, x * op.z),
+			CAST(SignedType, x * op.y) - CAST(SignedType, y * op.x) };
+	}
+
+	template <typename AnotherType>
+	inline friend Vector<SignedType<RESULT_TYPE(Type, *, AnotherType)>, 3>
+	cross(const Vector<Type, 3> &op1, const Vector<AnotherType, 3> &op2)
+	{
+		return op1.cross(op2);
+	}
+	#endif
+
+	template <typename AnotherType>
+	inline RESULT_TYPE(Type, *, AnotherType)
+	dot(const Vector<AnotherType, VMATH_VECTOR_SIZE> &op) const
+	{
+		return EXPAND(x * op.x, + y * op.y, + z * op.z, + w * op.w);
+	}
+
+	template <typename AnotherType>
+	inline friend RESULT_TYPE(Type, *, AnotherType)
+	dot(const Vector<Type, VMATH_VECTOR_SIZE> &op1, const Vector<AnotherType, VMATH_VECTOR_SIZE> &op2)
+	{
+		return op1.dot(op2);
+	}
+
+	inline Type qlength() const
+	{
+		return EXPAND(x * x, + y * y, + z * z, + w * w);
+	}
+
+	inline friend Type qlength(const Vector<Type, VMATH_VECTOR_SIZE> &op)
+	{
+		return op.qlength();
+	}
+
+	inline typename FloatPointTools<Type>::FloatPointType length() const
+	{
+		return FloatPointTools<Type>::sqrt(qlength());
+	}
+
+	inline friend typename FloatPointTools<Type>::FloatPointType length(const Vector<Type, VMATH_VECTOR_SIZE> &vector)
+	{
+		return vector.length();
+	}
+
+	inline Vector<typename FloatPointTools<Type>::FloatPointType, VMATH_VECTOR_SIZE> normalize() const
+	{
+		return { OPERANDS(FloatPointTools<Type>::normCoeff(qlength()) *, x, y, z, w) };
+	}
+
+	inline friend Vector<typename FloatPointTools<Type>::FloatPointType, VMATH_VECTOR_SIZE>
+	normalize(const Vector<Type, VMATH_VECTOR_SIZE> &vector)
+	{
+		return vector.normalize();
+	}
+
+	template <typename AnotherType>
+	inline QuadDistanceType<Type, AnotherType> qdistance(const Vector<AnotherType, VMATH_VECTOR_SIZE> &right) const
+	{
+		return EXPAND(vmath::qdistance(x, right.x), + vmath::qdistance(y, right.y), + vmath::qdistance(z, right.z), + vmath::qdistance(w, right.w));
+	}
+
+	template <typename AnotherType>
+	inline friend QuadDistanceType<Type, AnotherType>
+	qdistance(const Vector<Type, VMATH_VECTOR_SIZE> &left, const Vector<AnotherType, VMATH_VECTOR_SIZE> &right)
+	{
+		return left.qdistance(right);
+	}
+
+	template <typename AnotherType>
+	inline typename FloatPointTools<QuadDistanceType<Type, AnotherType>>::FloatPointType
+	distance(const Vector<AnotherType, VMATH_VECTOR_SIZE> &right) const
+	{
+		return FloatPointTools<QuadDistanceType<Type, AnotherType>>::sqrt(qdistance(right));
+	}
+
+	template <typename AnotherType>
+	inline friend decltype(std::declval<Vector<Type, VMATH_VECTOR_SIZE>>().distance(std::declval<Vector<AnotherType, VMATH_VECTOR_SIZE>>()))
+	distance(const Vector<Type, VMATH_VECTOR_SIZE> &left, const Vector<AnotherType, VMATH_VECTOR_SIZE> &right)
+	{
+		return left.distance(right);
+	}
+};
+
+template <typename Type>
+inline Vector<Type, VMATH_VECTOR_SIZE> v(OPERANDS(Type, x, y, z, w))
+{
+	return { OPERANDS(, x, y, z, w) };
+}
+
+#define BINARY_OPERATOR(op)\
+template <typename Type1, typename Type2>\
+Vector<RESULT_TYPE(Type1, op, Type2), VMATH_VECTOR_SIZE>\
+inline operator op(const Vector<Type1, VMATH_VECTOR_SIZE> &left, const Vector<Type2, VMATH_VECTOR_SIZE> &right){\
+return {OPERANDS(, left.x op right.x, left.y op right.y, left.z op right.z, left.w op right.w)};}\
+\
+template <typename Type1, typename Type2>\
+Vector<RESULT_TYPE(Type1, op, Type2), VMATH_VECTOR_SIZE>\
+inline operator op(const Vector<Type1, VMATH_VECTOR_SIZE> &left, const Type2 &right){\
+return {OPERANDS(, left.x op right, left.y op right, left.z op right, left.w op right)};}\
+\
+template <typename Type1, typename Type2>\
+Vector<RESULT_TYPE(Type1, op, Type2), VMATH_VECTOR_SIZE>\
+inline operator op(const Type1 &left, const Vector<Type2, VMATH_VECTOR_SIZE> &right){\
+return {OPERANDS(, left op right.x, left op right.y, left op right.z, left op right.w)};}\
+\
+template <typename Type1, typename Type2, unsigned int conv>\
+Vector<RESULT_TYPE(Type1, op, Type2), VMATH_VECTOR_SIZE>\
+inline operator op(const Swizzling<Type1, conv, VMATH_VECTOR_SIZE> &left, const Vector<Type2, VMATH_VECTOR_SIZE> &right){\
+return left.toVector() op right;}\
+\
+template <typename Type1, typename Type2, unsigned int conv>\
+Vector<RESULT_TYPE(Type1, op, Type2), VMATH_VECTOR_SIZE>\
+inline operator op(const Vector<Type1, VMATH_VECTOR_SIZE> &left, const Swizzling<Type2, conv, VMATH_VECTOR_SIZE> &right){\
+return left op right.toVector();}\
+\
+template <typename Type1, typename Type2, unsigned int conv>\
+Vector<RESULT_TYPE(Type1, op, Type2), VMATH_VECTOR_SIZE>\
+inline operator op(const Type1 &left, const Swizzling<Type2, conv, VMATH_VECTOR_SIZE> &right){\
+return left op right.toVector();}\
+\
+template <typename Type1, typename Type2, unsigned int conv>\
+Vector<RESULT_TYPE(Type1, op, Type2), VMATH_VECTOR_SIZE>\
+inline operator op(const Swizzling<Type1, conv, VMATH_VECTOR_SIZE> &left, const Type2 &right){\
+return left.toVector() op right;}\
+\
+template <typename Type1, typename Type2, unsigned int conv1, unsigned int conv2>\
+Vector<RESULT_TYPE(Type1, op, Type2), VMATH_VECTOR_SIZE>\
+inline operator op(const Swizzling<Type1, conv1, VMATH_VECTOR_SIZE> &left, const Swizzling<Type2, conv2, VMATH_VECTOR_SIZE> &right){\
+return left.toVector() op right.toVector();}
+
+BINARY_OPERATOR(+)
+BINARY_OPERATOR(-)
+BINARY_OPERATOR(*)
+BINARY_OPERATOR(/)
+
+#if (VMATH_VECTOR_SIZE > 1)
+typedef Vector<float, VMATH_VECTOR_SIZE> CONCAT(vec, VMATH_VECTOR_SIZE);
+typedef Vector<double, VMATH_VECTOR_SIZE> CONCAT(dvec, VMATH_VECTOR_SIZE);
+typedef Vector<int, VMATH_VECTOR_SIZE> CONCAT(ivec, VMATH_VECTOR_SIZE);
+typedef Vector<unsigned int, VMATH_VECTOR_SIZE> CONCAT(uvec, VMATH_VECTOR_SIZE);
+typedef Vector<bool, VMATH_VECTOR_SIZE> CONCAT(bvec, VMATH_VECTOR_SIZE);
+#endif
+
+}
+
+#include <vmath\PreprocessorTools.h>
+#undef VMATH_VECTOR_SIZE
+#undef BINARY_OPERATOR
+#undef SELF_BINARY_OPERATOR
+#undef UNARY_OPERATOR
+#undef INNER_TYPE
+#undef CAST
+#undef RESULT_TYPE
+#endif // VMATH_VECTOR_SIZE

@@ -1,0 +1,302 @@
+#ifndef VMATH_MATRIX_CORE
+#define VMATH_MATRIX_CORE
+
+#include <vmath\Vector.h>
+
+namespace vmath
+{
+
+template <typename Type, unsigned int columns, unsigned int rows>
+class Matrix;
+
+#include <vmath\PreprocessorTools.h>
+
+FLAG_ENUM(ZERO)
+FLAG_ENUM(FILL)
+FLAG_ENUM(TRANSPOSED)
+
+#include <vmath\PreprocessorTools.h>
+
+}
+
+#endif // VMATH_MATRIX_CORE
+
+#ifdef VMATH_MATRIX_COLUMNS
+#ifdef VMATH_MATRIX_ROWS
+
+#define EXPAND_SIZE VMATH_MATRIX_COLUMNS
+#include <vmath\PreprocessorTools.h>
+
+namespace vmath
+{
+
+template <typename Type>
+class Matrix<Type, VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS>
+{
+public:
+	template <typename Type, unsigned int rows>
+	using ColumnType = typename Vector<Type, rows>::InnerType;
+
+	template <typename Type, unsigned int columns, unsigned int rows>
+	using MatrixType = typename Vector<ColumnType<Type, rows>, columns>::InnerType;
+
+	typedef ColumnType<Type, VMATH_MATRIX_ROWS> InnerColumnType;
+	typedef MatrixType<Type, VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS> InnerMatrixType;
+
+	union
+	{
+		Type storage[VMATH_MATRIX_COLUMNS][VMATH_MATRIX_ROWS];
+		Type memory[VMATH_MATRIX_COLUMNS * VMATH_MATRIX_ROWS];
+		InnerMatrixType matrix;
+	};
+
+	template <typename AnotherType>
+	Matrix(const Matrix<AnotherType, VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS> &mat):
+		matrix(mat.matrix) {}
+
+	Matrix(const InnerMatrixType &mat):
+		matrix(mat) {}
+
+	operator InnerMatrixType()
+	{
+		return matrix;
+	}
+
+	Matrix(OPERANDS(const InnerColumnType &, x, y, z = CAST(Type, 0), w = CAST(Type, 0))):
+		matrix(OPERANDS(, x, y, z, w)) {}
+
+	template <typename AnotherType>
+	Matrix(const AnotherType *mem):
+		matrix(OPERANDS(, { mem }, { mem + VMATH_MATRIX_ROWS }, { mem + 2 * VMATH_MATRIX_ROWS }, {mem + 3 * VMATH_MATRIX_ROWS})) {}
+
+	Matrix(Flag_FILL flag, const Type& scalar = CAST(Type, 0)):
+		matrix(OPERANDS(, scalar, scalar, scalar, scalar)) {}
+
+	#if (VMATH_MATRIX_COLUMNS == VMATH_MATRIX_ROWS)
+	explicit Matrix(const Type& scalar = CAST(Type, 1)):
+		memory{ OPERANDS(,
+			OPERANDS(, scalar, CAST(Type, 0), CAST(Type, 0), CAST(Type, 0)),
+			OPERANDS(, CAST(Type, 0), scalar, CAST(Type, 0), CAST(Type, 0)),
+			OPERANDS(, CAST(Type, 0), CAST(Type, 0), scalar, CAST(Type, 0)),
+			OPERANDS(, CAST(Type, 0), CAST(Type, 0), CAST(Type, 0), scalar)) } {}
+
+	Matrix(Flag_TRANSPOSED flag, OPERANDS(const InnerColumnType &, x, y, z = CAST(Type, 0), w = CAST(Type, 0))):
+		memory{ OPERANDS(,
+			OPERANDS(, x.x, y.x, z.x, w.x),
+			OPERANDS(, x.y, y.y, z.y, w.y),
+			OPERANDS(, x.z, y.z, z.z, w.z),
+			OPERANDS(, x.w, y.w, z.w, w.w))} {}
+
+	#if(VMATH_MATRIX_COLUMNS > 2)
+	template <typename AnotherType>
+	explicit Matrix(const Matrix<AnotherType, VMATH_MATRIX_COLUMNS - 1, VMATH_MATRIX_ROWS - 1> &core, const Matrix &frame = Matrix()):
+		memory{ EXPAND(,
+			EXPAND(, CAST(Type, core[0].x), COMMA CAST(Type, core[0].y), COMMA CAST(Type, core[0].z)) COMMA frame[0][VMATH_MATRIX_ROWS - 1],
+			COMMA EXPAND(, CAST(Type, core[1].x), COMMA CAST(Type, core[1].y), COMMA CAST(Type, core[1].z)) COMMA frame[1][VMATH_MATRIX_ROWS - 1],
+			COMMA EXPAND(, CAST(Type, core[2].x), COMMA CAST(Type, core[2].y), COMMA CAST(Type, core[2].z)) COMMA frame[2][VMATH_MATRIX_ROWS - 1]),
+			EXPAND(frame[VMATH_MATRIX_COLUMNS - 1][0], COMMA frame[VMATH_MATRIX_COLUMNS - 1][1], COMMA frame[VMATH_MATRIX_COLUMNS - 1][2], COMMA frame[VMATH_MATRIX_COLUMNS - 1][3]) } {}
+	#endif
+
+	#if(VMATH_MATRIX_COLUMNS == 4)
+	template <typename AnotherType>
+	explicit Matrix(const Matrix<AnotherType, VMATH_MATRIX_COLUMNS - 2, VMATH_MATRIX_ROWS - 2> &core, const Matrix &frame = Matrix()):
+		memory{ EXPAND(,,
+			EXPAND(,, CAST(Type, core[0].x), COMMA CAST(Type, core[0].y)) COMMA frame[0][2] COMMA frame[0][3],
+			COMMA EXPAND(,, CAST(Type, core[1].x), COMMA CAST(Type, core[1].y)) COMMA frame[1][2] COMMA frame[1][3]),
+			frame[2][0], frame[2][1], frame[2][2], frame[2][3],
+			frame[3][0], frame[3][1], frame[3][2], frame[3][3] } {}
+	#endif
+
+	#else
+	explicit Matrix(const Type& scalar = CAST(Type, 0)):
+		Matrix(FILL, scalar) {}
+
+	#include <vmath\PreprocessorTools.h>
+	#define EXPAND_SIZE VMATH_MATRIX_ROWS
+	#include <vmath\PreprocessorTools.h>
+
+	Matrix(OPERANDS(const Vector<Type COMMA VMATH_MATRIX_COLUMNS> &, x, y, z = CAST(Type, 0), w = CAST(Type, 0))):
+		matrix{ Vector<Vector<Type, VMATH_MATRIX_ROWS>, 4>(
+			Vector<Type, VMATH_MATRIX_ROWS>(OPERANDS(, x[0], y[0], z[0], w[0])),
+			Vector<Type, VMATH_MATRIX_ROWS>(OPERANDS(, x[1], y[1], z[1], w[1])),
+			Vector<Type, VMATH_MATRIX_ROWS>(OPERANDS(, x[2], y[2], z[2], w[2])),
+			Vector<Type, VMATH_MATRIX_ROWS>(OPERANDS(, x[3], y[3], z[3], w[3]))) } {}
+
+	Matrix(Flag_TRANSPOSED flag, OPERANDS(const Vector<Type COMMA VMATH_MATRIX_COLUMNS> &, x, y, z = CAST(Type, 0), w = CAST(Type, 0))):
+		Matrix(OPERANDS(, x, y, z, w)) {}
+
+	#include <vmath\PreprocessorTools.h>
+	#define EXPAND_SIZE VMATH_MATRIX_COLUMNS
+	#include <vmath\PreprocessorTools.h>
+
+	#endif
+
+	InnerColumnType& operator[](unsigned int index)
+	{
+		return matrix[index];
+	}
+
+	const InnerColumnType& operator[](unsigned int index) const
+	{
+		return matrix[index];
+	}
+
+	#define SELF_BINARY_OPERATOR(op)\
+	template <typename AnotherType>\
+	inline Matrix& operator op(const Matrix<AnotherType, VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS> &mat){\
+	matrix op mat.matrix;\
+	return *this;}
+
+	#define UNARY_OPERATOR(op)\
+	inline Matrix operator op() const{\
+	return op matrix;}
+
+	UNARY_OPERATOR(-)
+
+	SELF_BINARY_OPERATOR(+=)
+	SELF_BINARY_OPERATOR(-=)
+	SELF_BINARY_OPERATOR(/=)
+
+	template <typename AnotherType>
+	inline Vector<RESULT_TYPE(Type, *, AnotherType), VMATH_MATRIX_ROWS>
+	operator *(const Vector<AnotherType, VMATH_MATRIX_COLUMNS> &column) const
+	{
+		return dot(matrix, column);
+	}
+
+	template <typename AnotherType>
+	inline Matrix<RESULT_TYPE(Type, *, AnotherType), VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS>
+	cwiseMult(const Matrix<AnotherType, VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS> &right) const
+	{
+		return matrix * right.matrix;
+	}
+
+	template <typename AnotherType>
+	inline friend Matrix<RESULT_TYPE(Type, *, AnotherType), VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS>
+	cwiseMult(const Matrix<Type, VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS> &left, const Matrix<AnotherType, VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS> &right)
+	{
+		return left.cwiseMult(right);
+	}
+
+	template <typename AnotherType>
+	inline Matrix<RESULT_TYPE(Type, *, AnotherType), VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS>
+	matrixCompMult(const Matrix<AnotherType, VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS> &right) const
+	{
+		return cwiseMult(right);
+	}
+
+	template <typename AnotherType>
+	inline friend Matrix<RESULT_TYPE(Type, *, AnotherType), VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS>
+	matrixCompMult(const Matrix<Type, VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS> &left, const Matrix<AnotherType, VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS> &right)
+	{
+		return left.cwiseMult(right);
+	}
+
+	template <typename AnotherType>
+	inline Matrix& selfCwizeMult(const Matrix<AnotherType, VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS> &mat)
+	{
+		matrix *= mat.matrix;
+		return *this;
+	}
+
+	friend std::ostream& operator<<(std::ostream &os, const Matrix& mat)
+	{
+		os << mat.matrix;
+		return os;
+	}
+
+	inline Matrix<Type, VMATH_MATRIX_ROWS, VMATH_MATRIX_COLUMNS> transpose() const
+	{
+		return { TRANSPOSED, OPERANDS(, matrix.x, matrix.y, matrix.z, matrix.w) };
+	}
+
+	inline friend Matrix<Type, VMATH_MATRIX_ROWS, VMATH_MATRIX_COLUMNS> transpose(const Matrix &mat)
+	{
+		return mat.transpose();
+	}
+};
+
+#define BINARY_OPERATOR(op)\
+template <typename Type1, typename Type2>\
+inline Matrix<RESULT_TYPE(Type1, op, Type2), VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS>\
+operator op(const Matrix<Type1, VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS> &left, const Matrix<Type2, VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS> &right){\
+return left.matrix op right.matrix;}\
+
+BINARY_OPERATOR(+)
+BINARY_OPERATOR(-)
+BINARY_OPERATOR(/)
+
+template <typename Type1, typename Type2, unsigned int rows>
+inline Matrix<RESULT_TYPE(Type1, *, Type2), VMATH_MATRIX_COLUMNS, rows>
+operator *(const Matrix<Type1, VMATH_MATRIX_ROWS, rows> &left, const Matrix<Type2, VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS> &right)
+{
+	return { OPERANDS(, dot(left.matrix, right[0]), dot(left.matrix, right[1]), dot(left.matrix, right[2]), dot(left.matrix, right[3])) };
+}
+
+template <typename Type1, typename Type2>
+inline typename std::enable_if<std::is_fundamental<Type1>::value, Matrix<RESULT_TYPE(Type1, *, Type2), VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS>>::type
+operator *(const Type1 &left, const Matrix<Type2, VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS> &right)
+{
+	return left * right.matrix;
+}
+
+template <typename Type1, typename Type2>
+inline typename std::enable_if<std::is_fundamental<Type2>::value, Matrix<RESULT_TYPE(Type1, *, Type2), VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS>>::type
+operator *(const Matrix<Type1, VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS> &left, const Type2 &right)
+{
+	return left.matrix * right;
+}
+
+#if (VMATH_MATRIX_ROWS == 1)
+template <typename Type>
+inline Matrix<Type, VMATH_MATRIX_COLUMNS, 1> Row(const Vector<Type, VMATH_MATRIX_COLUMNS> &row)
+{
+	return row;
+}
+
+template <typename Type, unsigned int conv>
+inline Matrix<Type, VMATH_MATRIX_COLUMNS, 1> Row(const Swizzling<Type, conv, VMATH_MATRIX_COLUMNS> &row)
+{
+	return Vector<Type, VMATH_MATRIX_COLUMNS>(row);
+}
+#endif
+
+#if (VMATH_MATRIX_COLUMNS == 1)
+template <typename Type>
+inline Matrix<Type, 1, VMATH_MATRIX_ROWS> Column(const Vector<Type, VMATH_MATRIX_ROWS> &column)
+{
+	return column;
+}
+
+template <typename Type, unsigned int conv>
+inline Matrix<Type, 1, VMATH_MATRIX_ROWS> Column(const Swizzling<Type, conv, VMATH_MATRIX_ROWS> &column)
+{
+	return Vector<Type, VMATH_MATRIX_ROWS>(column);
+}
+#endif
+
+#if(VMATH_MATRIX_ROWS > 1)
+#if(VMATH_MATRIX_COLUMNS > 1)
+
+#if(VMATH_MATRIX_ROWS == VMATH_MATRIX_COLUMNS)
+typedef Matrix<float, VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS> CONCAT(mat, VMATH_MATRIX_ROWS);
+typedef Matrix<int, VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS> CONCAT(imat, VMATH_MATRIX_ROWS);
+typedef Matrix<unsigned int, VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS> CONCAT(umat, VMATH_MATRIX_ROWS);
+typedef Matrix<double, VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS> CONCAT(dmat, VMATH_MATRIX_ROWS);
+#else
+typedef Matrix<float, VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS> CONCAT(mat, CONCAT(VMATH_MATRIX_COLUMNS, CONCAT(x, VMATH_MATRIX_ROWS)));
+typedef Matrix<int, VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS> CONCAT(imat, CONCAT(VMATH_MATRIX_COLUMNS, CONCAT(x, VMATH_MATRIX_ROWS)));
+typedef Matrix<unsigned int, VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS> CONCAT(umat, CONCAT(VMATH_MATRIX_COLUMNS, CONCAT(x, VMATH_MATRIX_ROWS)));
+typedef Matrix<double, VMATH_MATRIX_COLUMNS, VMATH_MATRIX_ROWS> CONCAT(dmat, CONCAT(VMATH_MATRIX_COLUMNS, CONCAT(x, VMATH_MATRIX_ROWS)));
+#endif
+
+#endif
+#endif
+
+}
+
+#include <vmath\PreprocessorTools.h>
+#undef VMATH_MATRIX_ROWS
+#undef VMATH_MATRIX_COLUMNS
+#endif // VMATH_MATRIX_ROWS
+#endif // VMATH_MATRIX_COLUMNS
